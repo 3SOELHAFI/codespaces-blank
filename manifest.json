@@ -1,0 +1,9 @@
+{
+  "name": "مركز تسعين لغسيل السيارات",
+  "short_name": "مركز تسعين",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090909",
+  "theme_color": "#ff2d2d",
+  "icons": []
+}

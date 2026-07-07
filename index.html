@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ff2d2d" />
+    <title>مركز 90 لغسيل السيارات</title>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="loginScreen" class="login-screen">
+      <div class="login-card">
+        <div class="login-brand">
+          <span>90</span>
+          <strong>مركز 90 لغسيل السيارات</strong>
+        </div>
+        <h1>تسجيل الدخول</h1>
+        <p>مرحبًا بك في مركز 90 لغسيل السيارات</p>
+        <input id="loginUsername" placeholder="اسم المستخدم" />
+        <input id="loginPassword" type="password" placeholder="كلمة المرور" />
+        <button id="loginBtn" type="button">دخول</button>
+      </div>
+    </div>
+
+    <div id="appShell" class="app-shell hidden">
+      <header class="hero">
+        <div>
+          <div class="hero-logo" aria-label="شعار مركز 90 لغسيل السيارات">
+            <span>90</span>
+            <small>مركز 90 لغسيل السيارات</small>
+          </div>
+          <p class="eyebrow">نظام نقطة بيع متقدم</p>
+          <h1>مركز 90 لغسيل السيارات</h1>
+          <p class="subtext">نظام سريع واحترافي لإدارة المبيعات والتقارير والإعدادات.</p>
+        </div>
+        <div class="hero-badge">POS</div>
+      </header>
+
+      <nav class="nav-tabs" aria-label="الأقسام الرئيسية">
+        <button class="tab active" data-target="pos">نقطة البيع</button>
+        <button class="tab" data-target="reports">التقارير</button>
+        <button class="tab" data-target="settings">الإعدادات</button>
+      </nav>
+
+      <main>
+        <section id="pos" class="panel active-panel">
+          <div class="grid two-cols">
+            <div class="card">
+              <h2>بيانات العميل والخدمة</h2>
+              <form id="invoiceForm" class="invoice-form">
+                <div class="form-row">
+                  <label>اسم العميل
+                    <input id="customerName" required />
+                  </label>
+                  <label>رقم العميل
+                    <input id="customerPhone" required />
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label>نوع السيارة
+                    <input id="carType" required />
+                  </label>
+                  <label>اسم العامل
+                    <select id="worker">
+                      <option value="إبراهيم">إبراهيم</option>
+                      <option value="زكريا">زكريا</option>
+                      <option value="شعيب">شعيب</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label>طريقة الدفع
+                    <select id="paymentMethod">
+                      <option value="كاش">كاش</option>
+                      <option value="تحويل مصرفي">تحويل مصرفي</option>
+                    </select>
+                  </label>
+                  <label class="checkbox">
+                    <input id="subscription" type="checkbox" />
+                    العميل مشترك
+                  </label>
+                </div>
+
+                <div class="services-block">
+                  <h3>اختر الخدمة</h3>
+                  <div id="serviceButtons" class="service-buttons"></div>
+                </div>
+
+                <div class="manual-row">
+                  <input id="manualStainPrice" type="number" min="0" step="1" placeholder="سعر إزالة البقع يدويًا" />
+                  <button type="button" id="manualStainBtn">إضافة إزالة بقع</button>
+                </div>
+
+                <div class="summary-card">
+                  <h3>الفاتورة الحالية</h3>
+                  <ul id="currentItems" class="items-list"></ul>
+                  <div class="total-bar">
+                    <span>الإجمالي</span>
+                    <strong id="currentTotal">0</strong>
+                  </div>
+                  <div class="action-row">
+                    <label class="checkbox">
+                      <input id="printInvoice" type="checkbox" />
+                      طباعة الفاتورة
+                    </label>
+                    <button type="button" id="printCurrentInvoiceBtn">طباعة فاتورة احترافية</button>
+                    <button type="submit" id="saveInvoiceBtn">حفظ الفاتورة</button>
+                    <button type="button" id="resetFormBtn">إعادة تعيين</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            <aside class="card side-card">
+              <h2>الفواتير الأخيرة</h2>
+              <div id="recentInvoices" class="invoice-list"></div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="reports" class="panel">
+          <div class="stats-grid">
+            <article class="stat-card">
+              <h3>المبيعات اليومية</h3>
+              <p id="dailyCount">0</p>
+              <span id="dailyTotal">0</span>
+            </article>
+            <article class="stat-card">
+              <h3>المبيعات الشهرية</h3>
+              <p id="monthlyCount">0</p>
+              <span id="monthlyTotal">0</span>
+            </article>
+            <article class="stat-card">
+              <h3>العملاء المشتركين</h3>
+              <p id="subscribedCount">0</p>
+              <span id="subscribedTotal">0</span>
+            </article>
+          </div>
+
+          <div class="card report-card">
+            <div class="report-header">
+              <h2>سجل الفواتير</h2>
+              <div class="report-tools">
+                <select id="reportTypeSelect">
+                  <option value="all">الكل</option>
+                  <option value="daily">تقرير يومي</option>
+                  <option value="weekly">تقرير أسبوعي</option>
+                  <option value="monthly">تقرير شهري</option>
+                  <option value="customer">عميل محدد</option>
+                </select>
+                <input id="reportDateInput" type="text" placeholder="yyyy-mm-dd أو yyyy-mm" />
+                <input id="reportCustomerInput" type="text" placeholder="اسم العميل" />
+                <input id="reportSearch" type="search" placeholder="ابحث عن عميل أو رقم أو خدمة" />
+                <button id="exportPdfBtn" type="button">تصدير إلى PDF</button>
+              </div>
+            </div>
+            <div id="reportInvoices" class="invoice-list"></div>
+          </div>
+
+          <div class="card report-card">
+            <div class="report-header">
+              <h2>تقرير مفصل لكل عميل</h2>
+            </div>
+            <div id="customerReportList" class="invoice-list"></div>
+          </div>
+        </section>
+
+        <section id="settings" class="panel">
+          <div class="grid two-cols">
+            <div class="card">
+              <h2>إدارة الخدمات</h2>
+              <form id="serviceForm" class="invoice-form">
+                <div class="form-row">
+                  <label>اسم الخدمة
+                    <input id="serviceName" required />
+                  </label>
+                  <label>السعر
+                    <input id="servicePrice" type="number" min="0" step="1" required />
+                  </label>
+                </div>
+                <div class="action-row">
+                  <button type="submit" id="serviceSubmitBtn">إضافة خدمة</button>
+                  <button type="button" id="cancelServiceEditBtn" class="secondary">إلغاء</button>
+                </div>
+              </form>
+              <div id="serviceList" class="service-list"></div>
+            </div>
+
+            <div class="card">
+              <h2>إدارة الفواتير السابقة</h2>
+              <div id="invoiceManagement" class="invoice-list"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
