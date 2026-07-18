@@ -128,6 +128,20 @@ button, input, select {
 
 .hero h1 { margin: 0 0 6px; font-size: 2rem; }
 .subtext { margin: 0; color: #f2d7d7; }
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.refresh-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .hero-badge {
   font-size: 2.2rem;
   font-weight: 900;

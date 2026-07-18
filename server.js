@@ -4,17 +4,26 @@ import { fileURLToPath } from 'url';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import { authenticateUser } from './logic.js';
+import { clearAppData } from './reset-data.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8000;
 
 app.use(express.json());
 app.use(express.static(__dirname));
 
 let db;
+
+async function ensureColumn(tableName, columnName, definition) {
+  const columns = await db.all(`PRAGMA table_info(${tableName})`);
+  const exists = columns.some((column) => column.name === columnName);
+  if (!exists) {
+    await db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
+}
 
 async function initDb() {
   db = await open({
@@ -39,9 +48,24 @@ async function initDb() {
       subscription INTEGER NOT NULL,
       services TEXT NOT NULL,
       total REAL NOT NULL,
-      createdAt TEXT NOT NULL
+      createdAt TEXT NOT NULL,
+      paymentStatus TEXT NOT NULL,
+      pendingAmount REAL NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS salaries (
+      id TEXT PRIMARY KEY,
+      personName TEXT NOT NULL,
+      amount REAL NOT NULL,
+      date TEXT NOT NULL,
+      note TEXT NOT NULL,
+      discount REAL NOT NULL DEFAULT 0
     );
   `);
+
+  await ensureColumn('invoices', 'paymentStatus', 'TEXT NOT NULL DEFAULT "مدفوعة"');
+  await ensureColumn('invoices', 'pendingAmount', 'REAL NOT NULL DEFAULT 0');
+  await ensureColumn('salaries', 'discount', 'REAL NOT NULL DEFAULT 0');
 
   const existingServices = await db.all('SELECT id FROM services');
   if (!existingServices.length) {
@@ -96,8 +120,8 @@ app.get('/api/invoices', async (_req, res) => {
 app.post('/api/invoices', async (req, res) => {
   const invoice = req.body;
   await db.run(
-    'INSERT INTO invoices (id, customerName, customerPhone, carType, worker, paymentMethod, subscription, services, total, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [invoice.id, invoice.customerName, invoice.customerPhone, invoice.carType, invoice.worker, invoice.paymentMethod, invoice.subscription ? 1 : 0, JSON.stringify(invoice.services), invoice.total, invoice.createdAt],
+    'INSERT INTO invoices (id, customerName, customerPhone, carType, worker, paymentMethod, subscription, services, total, createdAt, paymentStatus, pendingAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [invoice.id, invoice.customerName, invoice.customerPhone, invoice.carType, invoice.worker, invoice.paymentMethod, invoice.subscription ? 1 : 0, JSON.stringify(invoice.services), invoice.total, invoice.createdAt, invoice.paymentStatus || 'مدفوعة', invoice.pendingAmount || 0],
   );
   res.json({ ok: true });
 });
@@ -105,14 +129,47 @@ app.post('/api/invoices', async (req, res) => {
 app.put('/api/invoices/:id', async (req, res) => {
   const invoice = req.body;
   await db.run(
-    'UPDATE invoices SET customerName = ?, customerPhone = ?, carType = ?, worker = ?, paymentMethod = ?, subscription = ?, services = ?, total = ?, createdAt = ? WHERE id = ?',
-    [invoice.customerName, invoice.customerPhone, invoice.carType, invoice.worker, invoice.paymentMethod, invoice.subscription ? 1 : 0, JSON.stringify(invoice.services), invoice.total, invoice.createdAt, req.params.id],
+    'UPDATE invoices SET customerName = ?, customerPhone = ?, carType = ?, worker = ?, paymentMethod = ?, subscription = ?, services = ?, total = ?, createdAt = ?, paymentStatus = ?, pendingAmount = ? WHERE id = ?',
+    [invoice.customerName, invoice.customerPhone, invoice.carType, invoice.worker, invoice.paymentMethod, invoice.subscription ? 1 : 0, JSON.stringify(invoice.services), invoice.total, invoice.createdAt, invoice.paymentStatus || 'مدفوعة', invoice.pendingAmount || 0, req.params.id],
   );
   res.json({ ok: true });
 });
 
 app.delete('/api/invoices/:id', async (req, res) => {
   await db.run('DELETE FROM invoices WHERE id = ?', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.get('/api/salaries', async (_req, res) => {
+  const salaries = await db.all('SELECT * FROM salaries ORDER BY date DESC, id DESC');
+  res.json(salaries);
+});
+
+app.post('/api/salaries', async (req, res) => {
+  const salary = req.body;
+  await db.run(
+    'INSERT INTO salaries (id, personName, amount, date, note, discount) VALUES (?, ?, ?, ?, ?, ?)',
+    [salary.id, salary.personName, salary.amount, salary.date, salary.note || '', Number(salary.discount || 0)],
+  );
+  res.json({ ok: true });
+});
+
+app.put('/api/salaries/:id', async (req, res) => {
+  const salary = req.body;
+  await db.run(
+    'UPDATE salaries SET personName = ?, amount = ?, date = ?, note = ?, discount = ? WHERE id = ?',
+    [salary.personName, salary.amount, salary.date, salary.note || '', Number(salary.discount || 0), req.params.id],
+  );
+  res.json({ ok: true });
+});
+
+app.delete('/api/salaries/:id', async (req, res) => {
+  await db.run('DELETE FROM salaries WHERE id = ?', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.delete('/api/reset-all', async (_req, res) => {
+  await clearAppData(db);
   res.json({ ok: true });
 });
 

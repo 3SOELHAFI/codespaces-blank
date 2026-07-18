@@ -1,6 +1,8 @@
-import { authenticateUser, calculateInvoiceTotal, createInvoiceRecord, createServiceRecord, filterInvoicesByQuery, getCustomerReportGroups, getFilteredReportInvoices, getReportSummaries, updateInvoiceRecord } from './logic.js';
+import { authenticateUser, calculateInvoiceTotal, calculateProfitSummary, createInvoiceRecord, createSalaryRecord, createServiceRecord, filterInvoicesByQuery, getCustomerReportGroups, getFilteredReportInvoices, getReportSummaries, updateInvoiceRecord, updateSalaryRecord } from './logic.js';
+import { buildCacheBustUrl, shouldForceRefresh } from './refresh.js';
 
 const STORAGE_KEY = 'car-wash-pos-store';
+const AUTH_STORAGE_KEY = 'car-wash-pos-authenticated';
 
 const defaultServices = [
   { id: 'service-1', name: 'غسيل داخلي', price: 20 },
@@ -18,6 +20,8 @@ const defaultServices = [
 const initialState = {
   services: defaultServices,
   invoices: [],
+  salaries: [],
+  discounts: [],
 };
 
 let state = loadState();
@@ -41,7 +45,10 @@ const customerPhoneEl = document.getElementById('customerPhone');
 const carTypeEl = document.getElementById('carType');
 const workerEl = document.getElementById('worker');
 const paymentMethodEl = document.getElementById('paymentMethod');
+const invoiceDateEl = document.getElementById('invoiceDate');
 const subscriptionEl = document.getElementById('subscription');
+const cashOnDeliveryEl = document.getElementById('cashOnDelivery');
+const vipDiscountEl = document.getElementById('vipDiscount');
 const printInvoiceEl = document.getElementById('printInvoice');
 const manualStainPriceEl = document.getElementById('manualStainPrice');
 const manualStainBtn = document.getElementById('manualStainBtn');
@@ -57,18 +64,40 @@ const serviceNameEl = document.getElementById('serviceName');
 const servicePriceEl = document.getElementById('servicePrice');
 const serviceSubmitBtn = document.getElementById('serviceSubmitBtn');
 const cancelServiceEditBtn = document.getElementById('cancelServiceEditBtn');
+const salaryForm = document.getElementById('salaryForm');
+const salaryPersonEl = document.getElementById('salaryPerson');
+const salaryAmountEl = document.getElementById('salaryAmount');
+const salaryDateEl = document.getElementById('salaryDate');
+const salaryDiscountEl = document.getElementById('salaryDiscount');
+const salaryNoteEl = document.getElementById('salaryNote');
+const salaryListEl = document.getElementById('salaryList');
+const profitSummaryEl = document.getElementById('profitSummary');
+const profitDiscountEl = document.getElementById('profitDiscount');
+const discountForm = document.getElementById('discountForm');
+const discountAmountEl = document.getElementById('discountAmount');
+const discountDateEl = document.getElementById('discountDate');
+const discountPersonEl = document.getElementById('discountPerson');
+const discountNoteEl = document.getElementById('discountNote');
+const discountTypeEl = document.getElementById('discountType');
+const discountListEl = document.getElementById('discountList');
 const loginScreen = document.getElementById('loginScreen');
 const appShell = document.getElementById('appShell');
 const loginUsernameEl = document.getElementById('loginUsername');
 const loginPasswordEl = document.getElementById('loginPassword');
 const loginBtn = document.getElementById('loginBtn');
+const refreshBtn = document.getElementById('refreshBtn');
+const resetDataBtn = document.getElementById('resetDataBtn');
 
 let editingServiceId = null;
+let editingSalaryId = null;
+let editingDiscountId = null;
 
 setupTabs();
 setupLogin();
+setupRefreshButton();
+setupResetDataButton();
 registerServiceWorker();
-render();
+initializeApp();
 
 invoiceForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -116,6 +145,10 @@ reportDateInputEl.addEventListener('input', () => {
 });
 reportCustomerInputEl.addEventListener('input', () => {
   renderReports();
+});
+
+profitDiscountEl.addEventListener('input', () => {
+  renderProfitSummary();
 });
 
 exportPdfBtn.addEventListener('click', () => {
@@ -175,6 +208,79 @@ exportPdfBtn.addEventListener('click', () => {
   openPrintWindow(html);
 });
 
+discountForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const amount = Number(discountAmountEl.value || 0);
+  const date = discountDateEl.value;
+  const personName = discountPersonEl.value.trim();
+  const note = discountNoteEl.value.trim();
+  const type = discountTypeEl.value;
+
+  if (!amount || !date || !personName) {
+    alert('يرجى إدخال المبلغ والتاريخ واسم الشخص');
+    return;
+  }
+
+  const record = editingDiscountId
+    ? {
+        ...state.discounts.find((item) => item.id === editingDiscountId),
+        amount,
+        date,
+        personName,
+        note,
+        type,
+      }
+    : {
+        id: `discount-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        amount,
+        date,
+        personName,
+        note,
+        type,
+      };
+
+  if (editingDiscountId) {
+    state.discounts = state.discounts.map((item) => (item.id === editingDiscountId ? record : item));
+  } else {
+    state.discounts = [record, ...state.discounts];
+  }
+
+  saveState();
+  resetDiscountForm();
+  renderProfitSummary();
+  renderDiscountList();
+});
+
+salaryForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const personName = salaryPersonEl.value.trim();
+  const amount = Number(salaryAmountEl.value || 0);
+  const date = salaryDateEl.value;
+  const discount = Number(salaryDiscountEl.value || 0);
+  const note = salaryNoteEl.value.trim();
+
+  if (!personName || !amount || !date) {
+    alert('يرجى إدخال اسم الموظف والراتب والتاريخ');
+    return;
+  }
+
+  const salaryRecord = editingSalaryId
+    ? updateSalaryRecord(state.salaries.find((item) => item.id === editingSalaryId), { personName, amount, date, note, discount })
+    : createSalaryRecord({ personName, amount, date, note, discount });
+
+  if (editingSalaryId) {
+    state.salaries = state.salaries.map((item) => (item.id === editingSalaryId ? salaryRecord : item));
+  } else {
+    state.salaries = [salaryRecord, ...state.salaries];
+  }
+
+  await persistSalary(salaryRecord, editingSalaryId);
+  saveState();
+  renderSalaries();
+  renderProfitSummary();
+  resetSalaryForm();
+});
+
 serviceForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const name = serviceNameEl.value.trim();
@@ -211,6 +317,7 @@ function setupLogin() {
     }
 
     authenticated = true;
+    saveAuthState(true);
     loginScreen.classList.add('hidden');
     appShell.classList.remove('hidden');
     await loadRemoteData();
@@ -218,16 +325,29 @@ function setupLogin() {
   });
 }
 
+async function initializeApp() {
+  if (loadAuthState()) {
+    authenticated = true;
+    loginScreen.classList.add('hidden');
+    appShell.classList.remove('hidden');
+    await loadRemoteData();
+  }
+
+  render();
+}
+
 async function loadRemoteData() {
   try {
-    const [servicesResponse, invoicesResponse] = await Promise.all([
+    const [servicesResponse, invoicesResponse, salariesResponse] = await Promise.all([
       fetch('/api/services'),
       fetch('/api/invoices'),
+      fetch('/api/salaries'),
     ]);
 
     const services = await servicesResponse.json();
     const invoices = await invoicesResponse.json();
-    state = { services, invoices };
+    const salaries = await salariesResponse.json();
+    state = { ...state, services, invoices, salaries };
     saveState();
   } catch {
     state = loadState();
@@ -255,6 +375,63 @@ function setupTabs() {
   });
 }
 
+function setupRefreshButton() {
+  const refreshButtons = document.querySelectorAll('[data-action="refresh-app"]');
+
+  refreshButtons.forEach((button) => {
+    button.addEventListener('click', async () => {
+      const shouldReload = window.confirm('هل تريد إعادة تحميل الموقع للتأكد من تحميل أحدث نسخة؟');
+      if (!shouldReload) {
+        return;
+      }
+
+      localStorage.setItem('app-version', '');
+      await clearCachedAssets();
+      window.location.href = buildCacheBustUrl(window.location.pathname + window.location.search);
+    });
+  });
+}
+
+function setupResetDataButton() {
+  const resetButtons = document.querySelectorAll('[data-action="reset-data"]');
+
+  resetButtons.forEach((button) => {
+    button.addEventListener('click', async () => {
+      const shouldReset = window.confirm('سيتم حذف كل البيانات المحلية مثل الفواتير والرواتب والخصومات. هل تريد المتابعة؟');
+      if (!shouldReset) {
+        return;
+      }
+
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem('app-version');
+      try {
+        await fetch('/api/reset-all', { method: 'DELETE' });
+      } catch {
+        // ignore server reset failures
+      }
+      await clearCachedAssets();
+      window.location.href = buildCacheBustUrl(window.location.pathname + window.location.search);
+    });
+  });
+}
+
+async function clearCachedAssets() {
+  try {
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+    }
+
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+  } catch {
+    // ignore cache cleanup errors
+  }
+}
+
 function loadState() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -265,6 +442,8 @@ function loadState() {
     return {
       services: parsed.services?.length ? parsed.services : initialState.services,
       invoices: parsed.invoices || [],
+      salaries: parsed.salaries || [],
+      discounts: parsed.discounts || initialState.discounts,
     };
   } catch {
     return initialState;
@@ -273,6 +452,22 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function loadAuthState() {
+  try {
+    return localStorage.getItem(AUTH_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveAuthState(value) {
+  try {
+    localStorage.setItem(AUTH_STORAGE_KEY, String(value));
+  } catch {
+    // ignore storage errors
+  }
 }
 
 async function persistInvoice(invoice) {
@@ -315,6 +510,34 @@ async function persistService(service) {
   }
 }
 
+async function persistSalary(salary, editingId = null) {
+  try {
+    if (editingId) {
+      await fetch(`/api/salaries/${salary.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(salary),
+      });
+    } else {
+      await fetch('/api/salaries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(salary),
+      });
+    }
+  } catch {
+    // ignore network errors and keep working locally
+  }
+}
+
+async function deleteSalary(id) {
+  try {
+    await fetch(`/api/salaries/${id}`, { method: 'DELETE' });
+  } catch {
+    // ignore network errors and keep working locally
+  }
+}
+
 function render() {
   renderServiceButtons();
   renderCurrentInvoice();
@@ -322,6 +545,9 @@ function render() {
   renderReports();
   renderServices();
   renderInvoiceManagement();
+  renderSalaries();
+  renderDiscountList();
+  renderProfitSummary();
 }
 
 function renderServiceButtons() {
@@ -357,12 +583,15 @@ function renderCurrentInvoice() {
   } else {
     selectedServices.forEach((service) => {
       const item = document.createElement('li');
-      item.textContent = `${service.name} - ${service.price} دل`;
+      const detailSuffix = service.discountDate && service.discountPerson
+        ? ` · ${service.discountDate} · ${service.discountPerson}`
+        : '';
+      item.textContent = `${service.name} - ${service.price} دل${detailSuffix}`;
       currentItemsEl.appendChild(item);
     });
   }
 
-  currentTotalEl.textContent = `${calculateInvoiceTotal(selectedServices)} دل`;
+  currentTotalEl.textContent = `${calculateInvoiceTotal(selectedServices, { vipDiscount: Number(vipDiscountEl.value || 0) })} دل`;
 }
 
 function renderRecentInvoices() {
@@ -377,12 +606,14 @@ function renderRecentInvoices() {
   latest.forEach((invoice) => {
     const card = document.createElement('div');
     card.className = 'invoice-item';
+    const statusText = invoice.paymentStatus === 'معلقة' ? `· معلقة (${invoice.pendingAmount || 0} دل)` : '';
     card.innerHTML = `
       <strong>${invoice.customerName}</strong>
       <div>${invoice.carType} · ${invoice.worker}</div>
-      <div>${invoice.total} دل · ${invoice.paymentMethod}</div>
+      <div>${invoice.total} دل · ${invoice.paymentMethod} ${statusText}</div>
       <div>${new Date(invoice.createdAt).toLocaleString('ar-EG')}</div>
       <div class="invoice-actions">
+        ${invoice.paymentStatus === 'معلقة' ? `<button data-action="pay-invoice" data-id="${invoice.id}" type="button" style="background:#2e7d32;">تم الدفع</button>` : ''}
         <button data-action="edit" data-id="${invoice.id}" type="button">تعديل</button>
         <button data-action="delete" data-id="${invoice.id}" type="button">حذف</button>
       </div>
@@ -408,9 +639,10 @@ function renderReports() {
       customerName: reportCustomer,
     },
   );
-  const summary = getReportSummaries(filteredInvoices);
+  const summary = getReportSummaries(filteredInvoices, new Date(), state.discounts, state.salaries);
   document.getElementById('dailyCount').textContent = `${summary.dailyCount} فاتورة`;
   document.getElementById('dailyTotal').textContent = `${summary.dailyTotal} دل`;
+  document.getElementById('dailyDiscountTotal').textContent = `${summary.dailyDiscountTotal} دل`;
   document.getElementById('monthlyCount').textContent = `${summary.monthlyCount} فاتورة`;
   document.getElementById('monthlyTotal').textContent = `${summary.monthlyTotal} دل`;
   document.getElementById('subscribedCount').textContent = `${summary.subscribedCount} عميل`;
@@ -429,16 +661,93 @@ function renderReports() {
     .forEach((invoice) => {
       const item = document.createElement('div');
       item.className = 'invoice-item';
+      const statusText = invoice.paymentStatus === 'معلقة' ? `· معلقة (${invoice.pendingAmount || 0} دل)` : '';
       item.innerHTML = `
         <strong>${invoice.customerName}</strong>
         <div>${invoice.customerPhone} · ${invoice.carType}</div>
         <div>${invoice.services.map((service) => service.name).join('، ')}</div>
-        <div>الإجمالي: ${invoice.total} دل · ${invoice.paymentMethod} · ${invoice.subscription ? 'مشترك' : 'غير مشترك'}</div>
+        <div>الإجمالي: ${invoice.total} دل · ${invoice.paymentMethod} ${statusText} · ${invoice.subscription ? 'مشترك' : 'غير مشترك'}</div>
       `;
       reportInvoicesEl.appendChild(item);
     });
 
   renderCustomerReportList(filteredInvoices);
+}
+
+function renderSalaries() {
+  salaryListEl.innerHTML = '';
+  if (!state.salaries.length) {
+    salaryListEl.innerHTML = '<p class="muted">لا توجد رواتب مسجلة بعد.</p>';
+    return;
+  }
+
+  state.salaries
+    .slice()
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .forEach((salary) => {
+      const row = document.createElement('div');
+      row.className = 'service-row';
+      row.innerHTML = `
+        <div><strong>${salary.personName}</strong><div>${salary.amount} دل · ${salary.date}</div><div>${salary.note || 'بدون ملاحظة'}</div><div>${Number(salary.discount || 0) ? `الخصم: ${salary.discount} دل` : 'بدون خصم'}</div></div>
+        <div class="invoice-actions">
+          <button data-action="edit-salary" data-id="${salary.id}" type="button">تعديل</button>
+          <button data-action="delete-salary" data-id="${salary.id}" type="button">حذف</button>
+        </div>
+      `;
+      salaryListEl.appendChild(row);
+    });
+
+  salaryListEl.querySelectorAll('button').forEach((button) => {
+    button.addEventListener('click', () => handleSalaryAction(button.dataset.action, button.dataset.id));
+  });
+}
+
+function renderDiscountList() {
+  discountListEl.innerHTML = '';
+  if (!state.discounts?.length) {
+    discountListEl.innerHTML = '<p class="muted">لا توجد خصومات أو مصاريف مسجلة بعد.</p>';
+    return;
+  }
+
+  state.discounts
+    .slice()
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'service-row';
+      const typeLabel = item.type === 'salary' ? 'يخصم من راتب الموظف' : 'مصروف عام';
+      row.innerHTML = `
+        <div><strong>${item.personName}</strong><div>${item.amount} دل · ${item.date}</div><div>${typeLabel}</div><div>${item.note || 'بدون ملاحظة'}</div></div>
+        <div class="invoice-actions">
+          <button data-action="edit-discount" data-id="${item.id}" type="button">تعديل</button>
+          <button data-action="delete-discount" data-id="${item.id}" type="button">حذف</button>
+        </div>
+      `;
+      discountListEl.appendChild(row);
+    });
+
+  discountListEl.querySelectorAll('button').forEach((button) => {
+    button.addEventListener('click', () => handleDiscountAction(button.dataset.action, button.dataset.id));
+  });
+}
+
+function renderProfitSummary() {
+  const discount = Number(profitDiscountEl.value || 0);
+  const summary = calculateProfitSummary({ invoices: state.invoices, salaries: state.salaries, discounts: state.discounts, discount });
+  profitSummaryEl.innerHTML = `
+    <div class="invoice-item">
+      <strong>ملخص الأرباح</strong>
+      <div>إجمالي المبيعات: ${summary.totalSales} دل</div>
+      <div>إجمالي المرتبات: ${summary.totalSalaries} دل</div>
+      <div>إجمالي الخصومات: ${summary.totalDiscounts} دل</div>
+      <div>صافي الربح: ${summary.netProfit} دل</div>
+    </div>
+    <div class="invoice-item">
+      <strong>الفواتير المعلقة</strong>
+      <div>عددها: ${state.invoices.filter((invoice) => invoice.paymentStatus === 'معلقة').length}</div>
+      <div>إجماليها: ${state.invoices.reduce((sum, invoice) => sum + Number(invoice.paymentStatus === 'معلقة' ? invoice.pendingAmount || 0 : 0), 0)} دل</div>
+    </div>
+  `;
 }
 
 function renderCustomerReportList(invoices) {
@@ -496,10 +805,12 @@ function renderInvoiceManagement() {
     .forEach((invoice) => {
       const item = document.createElement('div');
       item.className = 'invoice-item';
+      const statusText = invoice.paymentStatus === 'معلقة' ? `· معلقة (${invoice.pendingAmount || 0} دل)` : '';
       item.innerHTML = `
         <strong>${invoice.customerName}</strong>
-        <div>${invoice.total} دل · ${invoice.paymentMethod}</div>
+        <div>${invoice.total} دل · ${invoice.paymentMethod} ${statusText}</div>
         <div class="invoice-actions">
+          ${invoice.paymentStatus === 'معلقة' ? `<button data-action="pay-invoice" data-id="${invoice.id}" type="button" style="background:#2e7d32;">تم الدفع</button>` : ''}
           <button data-action="edit-invoice" data-id="${invoice.id}" type="button">تعديل</button>
           <button data-action="delete-invoice" data-id="${invoice.id}" type="button">حذف</button>
         </div>
@@ -508,7 +819,9 @@ function renderInvoiceManagement() {
     });
 
   invoiceManagementEl.querySelectorAll('button').forEach((button) => {
-    button.addEventListener('click', () => handleInvoiceManagementAction(button.dataset.action, button.dataset.id));
+    button.addEventListener('click', () => {
+      handleInvoiceManagementAction(button.dataset.action, button.dataset.id);
+    });
   });
 }
 
@@ -533,12 +846,47 @@ function handleInvoiceManagementAction(action, id) {
     saveState();
     render();
   }
+  if (action === 'pay-invoice') {
+    const invoice = state.invoices.find((item) => item.id === id);
+    if (!invoice) return;
+    const updatedInvoice = {
+      ...invoice,
+      paymentStatus: 'مدفوعة',
+      pendingAmount: 0,
+    };
+    state.invoices = state.invoices.map((item) => (item.id === id ? updatedInvoice : item));
+    saveState();
+    render();
+  }
   if (action === 'edit-invoice') {
     const invoice = state.invoices.find((item) => item.id === id);
     if (!invoice) return;
     populateInvoiceForm(invoice);
     editingInvoiceId = invoice.id;
     document.querySelector('.tab[data-target="pos"]').click();
+  }
+}
+
+function handleSalaryAction(action, id) {
+  const salary = state.salaries.find((item) => item.id === id);
+  if (!salary) return;
+
+  if (action === 'delete-salary') {
+    state.salaries = state.salaries.filter((item) => item.id !== id);
+    saveState();
+    deleteSalary(id);
+    render();
+    return;
+  }
+
+  if (action === 'edit-salary') {
+    editingSalaryId = salary.id;
+    salaryPersonEl.value = salary.personName;
+    salaryAmountEl.value = salary.amount;
+    salaryDateEl.value = salary.date;
+    salaryDiscountEl.value = salary.discount || 0;
+    salaryNoteEl.value = salary.note || '';
+    document.querySelector('.tab[data-target="salaries"]').click();
   }
 }
 
@@ -560,6 +908,29 @@ function handleServiceAction(action, id) {
   }
 }
 
+function handleDiscountAction(action, id) {
+  const discount = state.discounts.find((item) => item.id === id);
+  if (!discount) return;
+
+  if (action === 'delete-discount') {
+    state.discounts = state.discounts.filter((item) => item.id !== id);
+    saveState();
+    renderProfitSummary();
+    renderDiscountList();
+    return;
+  }
+
+  if (action === 'edit-discount') {
+    editingDiscountId = discount.id;
+    discountAmountEl.value = discount.amount;
+    discountDateEl.value = discount.date;
+    discountPersonEl.value = discount.personName;
+    discountNoteEl.value = discount.note || '';
+    discountTypeEl.value = discount.type || 'general';
+    document.querySelector('.tab[data-target="profits"]').click();
+  }
+}
+
 async function saveInvoice() {
   const payload = {
     customerName: customerNameEl.value,
@@ -569,6 +940,9 @@ async function saveInvoice() {
     paymentMethod: paymentMethodEl.value,
     subscription: subscriptionEl.checked,
     services: selectedServices,
+    createdAt: invoiceDateEl.value ? new Date(invoiceDateEl.value).toISOString() : new Date().toISOString(),
+    cashOnDelivery: cashOnDeliveryEl.value === 'yes',
+    vipDiscount: Number(vipDiscountEl.value || 0),
   };
 
   if (!payload.customerName || !payload.customerPhone || !payload.carType || !selectedServices.length) {
@@ -578,7 +952,7 @@ async function saveInvoice() {
 
   const invoice = editingInvoiceId
     ? updateInvoiceRecord(state.invoices.find((item) => item.id === editingInvoiceId), payload)
-    : createInvoiceRecord({ ...payload, createdAt: new Date().toISOString() });
+    : createInvoiceRecord(payload);
 
   if (editingInvoiceId) {
     state.invoices = state.invoices.map((item) => (item.id === editingInvoiceId ? invoice : item));
@@ -601,7 +975,10 @@ function populateInvoiceForm(invoice) {
   carTypeEl.value = invoice.carType;
   workerEl.value = invoice.worker;
   paymentMethodEl.value = invoice.paymentMethod;
+  invoiceDateEl.value = invoice.createdAt ? new Date(invoice.createdAt).toISOString().slice(0, 16) : '';
   subscriptionEl.checked = invoice.subscription;
+  cashOnDeliveryEl.value = invoice.cashOnDelivery ? 'yes' : 'no';
+  vipDiscountEl.value = invoice.vipDiscount || 0;
   selectedServices = invoice.services.map((service) => ({ ...service }));
   renderServiceButtons();
   renderCurrentInvoice();
@@ -611,6 +988,9 @@ function resetForm() {
   invoiceForm.reset();
   selectedServices = [];
   editingInvoiceId = null;
+  invoiceDateEl.value = '';
+  cashOnDeliveryEl.value = 'no';
+  vipDiscountEl.value = '0';
   renderCurrentInvoice();
   renderServiceButtons();
 }
@@ -619,6 +999,19 @@ function resetServiceForm() {
   serviceForm.reset();
   editingServiceId = null;
   serviceSubmitBtn.textContent = 'إضافة خدمة';
+}
+
+function resetSalaryForm() {
+  salaryForm.reset();
+  editingSalaryId = null;
+  salaryDiscountEl.value = '0';
+}
+
+function resetDiscountForm() {
+  discountForm.reset();
+  editingDiscountId = null;
+  discountDateEl.value = new Date().toISOString().slice(0, 10);
+  discountTypeEl.value = 'general';
 }
 
 function updateReportInputsVisibility() {
@@ -655,18 +1048,29 @@ function buildDraftInvoice() {
     paymentMethod: paymentMethodEl.value,
     subscription: subscriptionEl.checked,
     services: selectedServices,
-    total: calculateInvoiceTotal(selectedServices),
-    createdAt: new Date().toISOString(),
+    total: calculateInvoiceTotal(selectedServices, { vipDiscount: Number(vipDiscountEl.value || 0) }),
+    createdAt: invoiceDateEl.value ? new Date(invoiceDateEl.value).toISOString() : new Date().toISOString(),
+    paymentStatus: paymentMethodEl.value === 'كاش' ? 'معلقة' : 'مدفوعة',
+    pendingAmount: paymentMethodEl.value === 'كاش' ? calculateInvoiceTotal(selectedServices, { vipDiscount: Number(vipDiscountEl.value || 0) }) : 0,
   };
 }
 
 function buildInvoiceHtml(invoice) {
-  const servicesMarkup = invoice.services.map((service) => `
-    <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed #aaa;">
-      <span>${service.name}</span>
-      <strong>${service.price} دل</strong>
-    </div>
-  `).join('');
+  const servicesMarkup = invoice.services.map((service) => {
+    const detailText = service.discountDate && service.discountPerson
+      ? `<div style="font-size:0.9rem;color:#666;">${service.discountDate} · ${service.discountPerson}</div>`
+      : '';
+
+    return `
+      <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed #aaa;">
+        <div>
+          <span>${service.name}</span>
+          ${detailText}
+        </div>
+        <strong>${service.price} دل</strong>
+      </div>
+    `;
+  }).join('');
 
   return `
     <div style="font-family:Tahoma;padding:24px;direction:rtl;line-height:1.6;max-width:700px;margin:0 auto;border:2px solid #111;border-radius:18px;">
@@ -680,6 +1084,10 @@ function buildInvoiceHtml(invoice) {
         <p style="margin:0;">نوع السيارة: <strong>${invoice.carType || 'غير محدد'}</strong></p>
         <p style="margin:0;">العامل: <strong>${invoice.worker || 'غير محدد'}</strong></p>
         <p style="margin:0;">الدفع: <strong>${invoice.paymentMethod || 'غير محدد'}</strong></p>
+        <p style="margin:0;">الدفع عند الاستلام: <strong>${invoice.cashOnDelivery ? 'نعم' : 'لا'}</strong></p>
+        <p style="margin:0;">خصم العميل المميز: <strong>${invoice.vipDiscount || 0} دل</strong></p>
+        <p style="margin:0;">الحالة: <strong>${invoice.paymentStatus || 'مدفوعة'}</strong></p>
+        <p style="margin:0;">القيمة المعلقة: <strong>${invoice.pendingAmount || 0} دل</strong></p>
         <p style="margin:0;">العميل مشترك: <strong>${invoice.subscription ? 'نعم' : 'لا'}</strong></p>
       </div>
       <div style="margin-top:12px;">${servicesMarkup}</div>

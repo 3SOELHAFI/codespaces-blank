@@ -11,6 +11,10 @@
   <body>
     <div id="loginScreen" class="login-screen">
       <div class="login-card">
+        <div class="login-actions" style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px;">
+          <button type="button" class="refresh-btn" data-action="refresh-app">تحديث الآن</button>
+          <button type="button" class="refresh-btn" data-action="reset-data" style="background:#8b1e1e; border-color:#8b1e1e;">مسح البيانات</button>
+        </div>
         <div class="login-brand">
           <span>90</span>
           <strong>مركز 90 لغسيل السيارات</strong>
@@ -34,12 +38,18 @@
           <h1>مركز 90 لغسيل السيارات</h1>
           <p class="subtext">نظام سريع واحترافي لإدارة المبيعات والتقارير والإعدادات.</p>
         </div>
-        <div class="hero-badge">POS</div>
+        <div class="hero-actions">
+          <button id="refreshBtn" type="button" class="refresh-btn">تحديث الآن</button>
+          <button id="resetDataBtn" type="button" class="refresh-btn" style="background:#8b1e1e; border-color:#8b1e1e;">مسح البيانات</button>
+          <div class="hero-badge">POS</div>
+        </div>
       </header>
 
       <nav class="nav-tabs" aria-label="الأقسام الرئيسية">
         <button class="tab active" data-target="pos">نقطة البيع</button>
         <button class="tab" data-target="reports">التقارير</button>
+        <button class="tab" data-target="profits">الأرباح</button>
+        <button class="tab" data-target="salaries">الرواتب</button>
         <button class="tab" data-target="settings">الإعدادات</button>
       </nav>
 
@@ -76,9 +86,23 @@
                       <option value="تحويل مصرفي">تحويل مصرفي</option>
                     </select>
                   </label>
+                  <label>الدفع عند الاستلام
+                    <select id="cashOnDelivery">
+                      <option value="no">لا</option>
+                      <option value="yes">نعم</option>
+                    </select>
+                  </label>
+                  <label>تاريخ الفاتورة
+                    <input id="invoiceDate" type="datetime-local" />
+                  </label>
                   <label class="checkbox">
                     <input id="subscription" type="checkbox" />
                     العميل مشترك
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label>خصم العميل المميز
+                    <input id="vipDiscount" type="number" min="0" step="1" value="0" />
                   </label>
                 </div>
 
@@ -127,6 +151,11 @@
               <span id="dailyTotal">0</span>
             </article>
             <article class="stat-card">
+              <h3>الخصومات اليومية</h3>
+              <p id="dailyDiscountTotal">0</p>
+              <span>إجمالي الخصومات والمصاريف اليومية</span>
+            </article>
+            <article class="stat-card">
               <h3>المبيعات الشهرية</h3>
               <p id="monthlyCount">0</p>
               <span id="monthlyTotal">0</span>
@@ -164,6 +193,80 @@
             </div>
             <div id="customerReportList" class="invoice-list"></div>
           </div>
+
+        </section>
+
+        <section id="profits" class="panel">
+          <div class="card report-card">
+            <div class="report-header">
+              <h2>الإيرادات والأرباح</h2>
+            </div>
+            <form id="discountForm" class="invoice-form" style="margin-top:16px;">
+              <div class="form-row">
+                <label>المبلغ
+                  <input id="discountAmount" type="number" min="0" step="1" required />
+                </label>
+                <label>التاريخ
+                  <input id="discountDate" type="date" required />
+                </label>
+                <label>اسم الشخص/الجهة
+                  <input id="discountPerson" required />
+                </label>
+                <label>ملاحظة
+                  <input id="discountNote" />
+                </label>
+                <label>النوع
+                  <select id="discountType">
+                    <option value="general">مصروف عام</option>
+                    <option value="salary">يخصم من راتب الموظف</option>
+                    <option value="worker-percentage">نسبة العمال</option>
+                  </select>
+                </label>
+              </div>
+              <div class="action-row">
+                <button type="submit">إضافة خصم/مصروف</button>
+              </div>
+            </form>
+            <div class="form-row" style="margin-top:16px;">
+              <label>الخصم في الأرباح
+                <input id="profitDiscount" type="number" min="0" step="1" value="0" />
+              </label>
+            </div>
+            <div id="discountList" class="service-list" style="margin-top:12px;"></div>
+            <div id="profitSummary" class="invoice-list"></div>
+          </div>
+        </section>
+
+        <section id="salaries" class="panel">
+          <div class="card">
+            <h2>إدارة الموظفين والمرتبات</h2>
+            <form id="salaryForm" class="invoice-form">
+              <div class="form-row">
+                <label>اسم الموظف
+                  <input id="salaryPerson" required />
+                </label>
+                <label>الراتب
+                  <input id="salaryAmount" type="number" min="0" step="1" required />
+                </label>
+              </div>
+              <div class="form-row">
+                <label>تاريخ الصرف
+                  <input id="salaryDate" type="date" required />
+                </label>
+                <label>الخصم
+                  <input id="salaryDiscount" type="number" min="0" step="1" value="0" />
+                </label>
+                <label>ملاحظة
+                  <input id="salaryNote" />
+                </label>
+              </div>
+              <div class="action-row">
+                <button type="submit" id="salarySubmitBtn">إضافة راتب</button>
+                <button type="button" id="salaryResetBtn" class="secondary">إلغاء</button>
+              </div>
+            </form>
+            <div id="salaryList" class="service-list"></div>
+          </div>
         </section>
 
         <section id="settings" class="panel">
@@ -192,6 +295,7 @@
               <div id="invoiceManagement" class="invoice-list"></div>
             </div>
           </div>
+
         </section>
       </main>
     </div>
